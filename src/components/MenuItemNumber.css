@@ -1,0 +1,7 @@
+.menu-item-number{display:inline-flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;width:58px;height:58px;border-radius:50%;background:#be2028;border:2px solid #f1b6a275;color:#fff;font:800 32px/1 Arial,sans-serif;letter-spacing:0;box-shadow:0 2px 5px #29080655;vertical-align:middle}
+.royal-gallery .royal-dish-visual>.menu-item-number{position:absolute;top:10px;left:10px;z-index:3}
+.royal-gallery .royal-dish-visual .royal-dish-badge{left:78px}
+.royal-board-item-name .menu-item-number{width:36px;height:36px;font-size:20px;margin-right:7px;box-shadow:none}
+.hot-deal-visual>.menu-item-number{position:absolute;top:20px;left:20px;z-index:2;width:68px;height:68px;font-size:38px}
+.hot-deal .hot-deal-label{left:100px}
+@media(max-width:600px){.royal-gallery .royal-dish-visual>.menu-item-number{width:50px;height:50px;font-size:28px}.royal-gallery .royal-dish-visual .royal-dish-badge{left:70px}.hot-deal-visual>.menu-item-number{top:9px;left:9px;width:48px;height:48px;font-size:26px}.hot-deal .hot-deal-label{left:67px}}

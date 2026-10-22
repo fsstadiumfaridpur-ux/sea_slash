@@ -1,0 +1,42 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {PGlite} from '@electric-sql/pglite';import{readFile}from'node:fs/promises';import{defaultPublicMenu}from'./publicMenu';
+test('public menu is readable without login, isolates drafts and permits only admin edits and uploads',async()=>{
+ const db=new PGlite();const query=async(sql:string,args:unknown[]=[]) => (await db.query<any>(sql,args)).rows[0]?.value;
+ const role=async(name:string)=>{await db.exec('reset role');await db.query("select set_config('test.role',$1,false)",[name]);await db.exec(`set role ${name==='anon'?'anon':'authenticated'}`);};
+ try{
+  await db.exec(`create role anon;create role authenticated;create role service_role;create schema storage;
+    create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+    create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);
+    alter table storage.objects enable row level security;
+    create policy legacy_storage_access on storage.objects for all to authenticated using(true) with check(true);
+    grant usage on schema storage to anon,authenticated;grant select on storage.objects to anon;grant select,insert,update,delete on storage.objects to authenticated;
+    create function public.is_restaurant_admin() returns boolean language sql stable as $$select coalesce(current_setting('test.role',true)='admin',false)$$;
+    create table public.app_state(key text,value jsonb);insert into public.app_state values('private-payroll','{"salary":9999}');`);
+  const sql=await readFile(new URL('../../supabase-public-menu.sql',import.meta.url),'utf8');await db.exec(sql);await db.exec(sql);
+  await role('anon');assert.deepEqual((await query('select public.get_public_restaurant_menu() value')).items,[]);
+  await assert.rejects(db.exec('select * from public.app_state'),/permission denied/);
+  await assert.rejects(db.exec('select * from public.restaurant_public_menu'),/permission denied/);
+  await assert.rejects(db.exec('select public.get_admin_restaurant_menu()'),/permission denied/);
+  await role('manager');await assert.rejects(db.exec('select public.get_admin_restaurant_menu()'),/Administrator/);
+  await assert.rejects(query('select public.save_public_restaurant_menu($1::jsonb,null) value',[JSON.stringify(defaultPublicMenu)]),/Administrator/);
+  await assert.rejects(db.exec("insert into storage.objects(bucket_id,name) values('menu-photos','bad.webp')"),/row-level security/);
+  await role('admin');const initial=await query('select public.get_admin_restaurant_menu() value');
+  const item={id:'dish',name:'Chicken Tikka',description:'Chargrilled',category:'Grills',price:280,photoUrl:'https://example.com/dish.webp',badge:'Signature',available:true,published:true,sortOrder:0,estimatedCOGS:999,staffSalary:9999};
+  const menu={...defaultPublicMenu,settings:{...defaultPublicMenu.settings,layout:'board',priceStyle:'brush',hotDealIds:['dish','draft','third'],hotDealSeconds:5},items:[item,{...item,id:'draft',name:'Secret draft',published:false},{...item,id:'third',name:'Another draft',published:false}]};
+  const saved=await query('select public.save_public_restaurant_menu($1::jsonb,$2) value',[JSON.stringify(menu),initial.updatedAt]);
+  assert.deepEqual(saved.menu.settings.hotDealIds,['dish','draft','third']);assert.equal(saved.menu.settings.priceStyle,'brush');assert.equal(saved.menu.settings.layout,'board');assert.equal(saved.menu.settings.hotDealSeconds,5);assert.equal(saved.menu.items.length,3);assert.equal(saved.menu.items[0].estimatedCOGS,undefined);
+  await assert.rejects(query('select public.save_public_restaurant_menu($1::jsonb,$2) value',[JSON.stringify(menu),initial.updatedAt]),/another session/);
+  await assert.rejects(query('select public.save_public_restaurant_menu($1::jsonb,$2) value',[JSON.stringify({...menu,items:[{...item,photoUrl:'javascript:alert(1)'}]}),saved.updatedAt]),/HTTPS/);
+  await assert.rejects(query('select public.save_public_restaurant_menu($1::jsonb,$2) value',[JSON.stringify({...menu,settings:{...menu.settings,priceStyle:'invalid'}}),saved.updatedAt]),/price label style/);
+  for(const ids of [['dish','dish'],['missing']])await assert.rejects(query('select public.save_public_restaurant_menu($1::jsonb,$2) value',[JSON.stringify({...menu,settings:{...menu.settings,hotDealIds:ids}}),saved.updatedAt]),/Hot Deals/);
+  for(const seconds of [4,301,5.5])await assert.rejects(query('select public.save_public_restaurant_menu($1::jsonb,$2) value',[JSON.stringify({...menu,settings:{...menu.settings,hotDealSeconds:seconds}}),saved.updatedAt]),/timer/);
+  await db.exec("insert into storage.objects(bucket_id,name) values('menu-photos','safe.webp')");
+  await role('anon');const visible=await query('select public.get_public_restaurant_menu() value');
+  assert.equal(visible.items.length,1);assert.equal(visible.items[0].name,'Chicken Tikka');assert.equal(visible.items[0].staffSalary,undefined);
+  assert.equal(await query('select count(*)::int value from storage.objects'),1);
+  await assert.rejects(db.exec("insert into storage.objects(bucket_id,name) values('menu-photos','anonymous.webp')"),/permission denied/);
+  await role('admin');
+  const deleted=await query('select public.save_public_restaurant_menu($1::jsonb,$2) value',[JSON.stringify({...menu,settings:{...menu.settings,hotDealIds:[]},items:menu.items.filter(item=>item.id!=='dish')}),saved.updatedAt]);
+  assert.deepEqual(deleted.menu.items.map((item:any)=>item.id),['draft','third']);
+  await role('anon');assert.deepEqual((await query('select public.get_public_restaurant_menu() value')).items,[]);
+ }finally{await db.close();}
+});

@@ -1,0 +1,12 @@
+import type {BazaarPhoto,DailySalesRecord,FoodCourtSettings,InventoryItem,MonthlyExpenseItem,PurchaseRecord,RecipeItem,StaffAdvance,StaffAttendance,StaffMember,WasteRecord} from '../types';
+export const defaultSettings: FoodCourtSettings = {stallName:'Sea Slash',foodCourtName:'',stallNumber:'',monthlyRent:0,dailyRent:0,commissionRate:0,managerContact:'',currency:'৳',facebookUrl:''};
+export const initialStaff: StaffMember[] = [];
+export const initialInventory: InventoryItem[] = [];
+export const initialPurchases: PurchaseRecord[] = [];
+export const initialWastes: WasteRecord[] = [];
+export const initialSalesHistory: DailySalesRecord[] = [];
+export const initialAdvances: StaffAdvance[] = [];
+export const initialAttendances: StaffAttendance[] = [];
+export const initialRecipes: RecipeItem[] = [];
+export const initialBazaarPhotos: BazaarPhoto[] = [];
+export const initialMonthlyExpenses: MonthlyExpenseItem[] = [];

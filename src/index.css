@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+.staff-input {
+  @apply mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm;
+}
+[data-theme="dark"] .staff-input {
+  @apply border-slate-700 bg-slate-950;
+}
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    @apply bg-slate-50 text-slate-800 dark:bg-[#0b0f17] dark:text-slate-200;
+  }
+
+  button, input, select, textarea, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid #d97706;
+    outline-offset: 3px;
+  }
+}
+
+.tabular-nums {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell {
+  min-width: 0;
+  min-height: 100dvh;
+}
+
+body:has(.app-shell .fixed.inset-0) {
+  overflow: hidden;
+}
+
+.app-shell :is(main, section, form, fieldset, .grid > *) {
+  min-width: 0;
+}
+
+.app-shell :is(h1, h2, h3, p, label, dd) {
+  overflow-wrap: anywhere;
+}
+
+.app-shell svg {
+  flex-shrink: 0;
+}
+
+.app-shell .overflow-x-auto {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Keep long forms reachable even in short landscape viewports. */
+.app-shell .fixed.inset-0 > :is(div, section, form) {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  margin-block: 0;
+}
+
+@media (max-width: 639px) {
+  .app-shell main {
+    padding-block: 1rem;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  .app-shell :is(button, a[href], select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"])) {
+    min-height: 44px;
+  }
+
+  .app-shell button {
+    min-width: 44px;
+    white-space: normal;
+  }
+
+  .app-shell :is(input, select, textarea) {
+    max-width: 100%;
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  .app-shell :is(input[type="checkbox"], input[type="radio"]) {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  .app-shell input[type="range"] {
+    min-height: 44px;
+  }
+
+  .app-shell :is(.font-mono, .tabular-nums) {
+    overflow-wrap: anywhere;
+  }
+
+  .app-shell .overflow-x-auto > table {
+    min-width: 600px;
+  }
+
+  .app-shell .overflow-x-auto > button,
+  .app-shell nav button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .app-shell .fixed.inset-0 {
+    padding: 12px;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .app-shell .fixed.inset-0 > :is(div, section, form) {
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 8px;
+  }
+
+  .app-shell .fixed :is(.px-6, .p-6) {
+    padding-inline: 16px;
+  }
+
+  .app-shell .fixed h3 {
+    font-size: 16px;
+  }
+
+  .app-shell .fixed :is(h2, h3) + button {
+    flex-shrink: 0;
+    min-width: 44px;
+  }
+
+  .app-shell .header-actions > :is(button, a) {
+    justify-content: center;
+    min-width: 44px;
+  }
+
+  .app-shell .header-actions a {
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 479px) {
+  .app-shell .fixed form :is(.grid-cols-2, .grid-cols-3) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (pointer: coarse) {
+  .app-shell :is(input, select, textarea) {
+    font-size: 16px;
+  }
+
+  .app-shell :is(button, a[href], select, input:not([type="checkbox"]):not([type="radio"])) {
+    min-height: 44px;
+  }
+}
+
+@media (max-height: 500px) and (max-width: 1023px) {
+  .app-shell .app-header {
+    position: static;
+  }
+}
+
+@media (max-width: 359px) {
+  .app-shell main .grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *, .app-shell *::before, .app-shell *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

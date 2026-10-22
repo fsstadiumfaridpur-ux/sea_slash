@@ -1,0 +1,11 @@
+[functions.staff-accounts]
+# The handler verifies the user JWT via Auth and checks the database admin role.
+verify_jwt = false
+
+[functions.clever-api]
+entrypoint = "./functions/staff-accounts/index.ts"
+verify_jwt = false
+
+[functions.prepare-menu-photo]
+# The function verifies the JWT and database admin role before calling the AI service.
+verify_jwt = false
