@@ -1,9 +1,10 @@
+import {printStaffSalarySheet} from '../utils/staffSalaryPrint';
 import {isViewDate,isViewMonth} from '../utils/viewPreferences';
 import {useRememberedViewState} from '../lib/useRememberedViewState';
 import {correctAttendanceHourlyRate, staffScheduledHours} from '../utils/staffShiftEarnings';
 import {useWorkScheduleHours} from '../lib/useWorkScheduleHours';
 import { StaffSalarySheetView } from './StaffSalarySheetView';
-import { buildStaffSalarySheet, salarySheetText } from '../utils/staffSalarySheet';
+import { buildStaffSalarySheet } from '../utils/staffSalarySheet';
 import { downloadStaffSalaryExcel } from '../utils/staffSalaryExcel';
 import { durationClock } from '../utils/staffShiftEarnings';
 import { AttendanceEarningsCells } from './AttendanceEarningsCells';
@@ -32,7 +33,6 @@ import type {
 } from "../types";
 import { formatBDT, formatNumber, getTodayString } from "../utils/formatters";
 import {
-  printStaffDocument,
 } from "../utils/staffPayroll";
 import { StaffProfileModal } from "./StaffProfileModal";
 import { StaffAgreements } from "./StaffAgreements";
@@ -164,7 +164,7 @@ export function StaffPayrollView({
   const printPayslip = (staff: StaffMember) => {
     try {
       const sheet = buildStaffSalarySheet(staff, attendanceList, advancesList, expenses, month, earningsNow);
-      printStaffDocument(`${staff.name} / ${month}`, salarySheetText(sheet,stallName));
+      printStaffSalarySheet(sheet,stallName);
     } catch (failure) { setError((failure as Error).message); }
   };
 

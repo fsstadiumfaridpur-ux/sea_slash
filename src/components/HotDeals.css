@@ -20,7 +20,7 @@
 .hot-price-seal .hot-deal-price::before{background:none;clip-path:none;border-radius:50%;border:1px solid #7d492b77;inset:12px}
 @media(max-width:600px){.hot-deals{gap:8px;padding:8px}.hot-deal-label{top:9px;left:9px;font-size:8px;letter-spacing:1px;padding:5px}.hot-deal-price{top:40px;min-width:75px;font-size:28px;padding:8px 18px 8px 10px}.hot-deal-copy{padding:12px 8px}.hot-deal-copy h1{font-size:23px}.hot-deal-copy p{font-size:11px}.hot-price-seal .hot-deal-price{right:8px;min-width:78px;font-size:26px}}
 
-.hot-deal-sample-photo{position:absolute;inset:0;background-image:url(/sea-slash-logo.svg);background-repeat:no-repeat;background-size:115% auto;background-position:center 88%}
+.hot-deal-sample-photo{position:absolute;inset:0;background-image:url(/menu/royal-feast.png);background-repeat:no-repeat;background-size:115% auto;background-position:center 88%}
 
 .hot-deals{position:relative;display:block}
 .hot-deal-slides{display:grid;grid-template-columns:repeat(var(--hot-columns,2),minmax(0,1fr));gap:16px;height:100%;min-height:0;animation:hot-slide-in .45s ease-out both}

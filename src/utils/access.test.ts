@@ -7,7 +7,7 @@ test('anonymous and unknown roles never gain management section access', () => {
   for (const value of ['staff', 'owner', '', null, true, { role: 'admin' }]) assert.equal(isRestaurantRole(value), false);
 });
 test('managers see operating sections without owner financial reports', () => {
-  for (const section of managementSections) assert.equal(canAccessSection('manager', section), !['overview', 'investment', 'planning', 'breakeven', 'publicmenu'].includes(section));
+  for (const section of managementSections) assert.equal(canAccessSection('manager', section), !['overview', 'investment', 'planning', 'breakeven', 'publicmenu', 'hardcash'].includes(section));
   assert.equal(canAccessSection('admin', 'investment'), true);
   assert.equal(canAccessSection('admin', 'unknown'), false);
 });

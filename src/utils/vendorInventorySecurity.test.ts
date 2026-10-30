@@ -122,3 +122,25 @@ test('replacement bills set the original quantity and value without replaying co
   await write([]);assert.equal((await stock())[0].currentStock,2);
  }finally{await db.close();}
 });
+
+test('unchanged legacy receipts never block an amount-only bill or a valid fractional replacement',async()=>{
+ const db=new PGlite();const key='sea_slash_vendor_ledger_v1',stockKey='sea_slash_inventory_v1';
+ // An earlier frontend stored quantities under quantityKg / pricePerKg.
+ const historical={id:'legacy',vendorId:'old-vendor',date:'2026-10-18',description:'Old purchase',quantityKg:1,pricePerKg:100,billed:100,paid:0,inventoryItemId:'old-item',inventoryQuantity:1,inventoryUnit:'kg'};
+ const amountOnly={id:'plain',vendorId:'aminul',date:'2026-10-22',description:'Kacha Morich / green chili',billed:25,paid:0};
+ const measured={...amountOnly,id:'new-measured',quantity:.25,unit:'kg',unitPrice:100,inventoryItemId:'chili',inventoryQuantity:.25,inventoryUnit:'kg',inventoryUpdateMode:'replace'};
+ const write=(rows:unknown[])=>db.query('update app_state set value=$2::jsonb where key=$1',[key,JSON.stringify(rows)]);
+ const inventory=async()=>(await db.query<{value:any[]}>('select value from app_state where key=$1',[stockKey])).rows[0].value;
+ try{
+  await db.exec(`create role anon;create role authenticated;create table app_state(key text primary key,value jsonb,updated_at timestamptz default now());
+   create function public.can_manage_restaurant() returns boolean language sql stable as $$select true$$;`);
+  await db.query('insert into app_state(key,value) values($1,$2::jsonb),($3,$4::jsonb)',[key,JSON.stringify([historical]),stockKey,JSON.stringify([{id:'old-item',name:'Old item',unit:'kg',currentStock:2,unitCost:100},{id:'chili',name:'Kacha Morich / green chili',unit:'kg',currentStock:.5,unitCost:80}])]);
+  await db.exec(await readFile(new URL('../../supabase-vendor-inventory.sql',import.meta.url),'utf8'));
+  await write([historical,amountOnly]);assert.equal((await inventory())[1].currentStock,.5);
+  await write([historical,amountOnly,measured]);assert.equal((await inventory())[1].currentStock,.25);assert.equal((await inventory())[1].unitCost,100);assert.equal((await inventory())[0].currentStock,2);
+  await write([{...historical,paid:50},amountOnly,measured]);assert.equal((await inventory())[1].currentStock,.25);
+  await assert.rejects(write([historical,amountOnly,{...measured,inventoryUnit:'liter'}]),/Invalid inventory-linked bill/);
+  await assert.rejects(write([{...historical,quantityKg:2},amountOnly,measured]),/Invalid inventory-linked bill/);
+  assert.equal((await inventory())[1].currentStock,.25);
+ }finally{await db.close();}
+});

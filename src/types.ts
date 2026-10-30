@@ -155,6 +155,9 @@ export interface StaffAdvance {
 }
 
 export interface RecipeItem {
+  publicMenuItemId?: string;
+  photoUrl?: string;
+  menuCategory?: string;
   id: string;
   dishName: string;
   sellingPrice: number;

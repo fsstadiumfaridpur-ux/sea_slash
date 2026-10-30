@@ -27,6 +27,14 @@ begin
   select value into stock from public.app_state where key = 'sea_slash_inventory_v1' for update;
   if stock is null then raise exception 'Inventory is unavailable. No bill or stock change was saved.'; end if;
   for bill in select r from jsonb_array_elements(after_rows) r where r ? 'inventoryItemId' or r ? 'inventoryQuantity' or r ? 'inventoryUnit' loop
+    -- Validate changed receipts only. Old quantityKg receipts and receipts whose
+    -- item/unit changed later must not block unrelated bills or payment edits.
+    select r into previous_bill from jsonb_array_elements(before_rows) r where r ->> 'id' = bill ->> 'id';
+    if previous_bill is not null and
+      jsonb_build_array(bill -> 'inventoryItemId',bill -> 'inventoryQuantity',bill -> 'inventoryUnit',bill -> 'quantity',bill -> 'unit',bill -> 'unitPrice',bill -> 'quantityKg',bill -> 'pricePerKg',bill -> 'billed',bill -> 'inventoryUpdateMode',bill ? 'balanceAdjustment',bill -> 'balanceAdjustment')
+      = jsonb_build_array(previous_bill -> 'inventoryItemId',previous_bill -> 'inventoryQuantity',previous_bill -> 'inventoryUnit',previous_bill -> 'quantity',previous_bill -> 'unit',previous_bill -> 'unitPrice',previous_bill -> 'quantityKg',previous_bill -> 'pricePerKg',previous_bill -> 'billed',previous_bill -> 'inventoryUpdateMode',previous_bill ? 'balanceAdjustment',previous_bill -> 'balanceAdjustment') then
+      continue;
+    end if;
     select r into item from jsonb_array_elements(stock) r where r ->> 'id' = bill ->> 'inventoryItemId';
     if item is null then
       select r into previous_bill from jsonb_array_elements(before_rows) r where r ->> 'id' = bill ->> 'id';
@@ -74,7 +82,7 @@ begin
     -- A deleted item has no stock to reverse. Apply the receipt to the newly
     -- selected item (if any), while leaving all other existing stock intact.
     if item is null then continue; end if;
-    if exists (select 1 from jsonb_array_elements(before_rows) r where r ->> 'inventoryItemId' = item_id and r ->> 'inventoryUnit' is distinct from item ->> 'unit') then
+    if replacement_qty is null and exists (select 1 from jsonb_array_elements(before_rows) r where r ->> 'inventoryItemId' = item_id and r ->> 'inventoryUnit' is distinct from item ->> 'unit') then
       raise exception 'Inventory unit changed; correct the linked bill before changing stock.';
     end if;
     next_qty := round(coalesce(replacement_qty,(item ->> 'currentStock')::numeric + delta), 6);

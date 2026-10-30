@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { isRestaurantRole, type RestaurantRole } from '../utils/access';
 
+export const ADMIN_EMAIL = 'officialseaslash@gmail.com';
 
 function clearBusinessCache() {
   for (const key of Object.keys(localStorage)) if (key.startsWith('sea_slash_') && key !== 'sea_slash_theme') localStorage.removeItem(key);
@@ -37,6 +38,12 @@ export function useAdminAuth() {
     async function verifyRole() {
       if (!supabase || !session) {
         if (!cancelled) { setRole(null); setRoleError(''); setAuthReady(true); }
+        return;
+      }
+      const {data:active,error:sessionError}=await supabase.rpc('restaurant_session_is_active');
+      if(!sessionError&&active===false){
+        if(!cancelled){clearBusinessCache();setRole(null);setSession(null);setAuthReady(true);}
+        await supabase.auth.signOut({scope:'local'});
         return;
       }
       const { data, error } = await supabase.rpc('restaurant_access_role');

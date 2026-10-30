@@ -67,3 +67,24 @@ contributions would be Owner ৳40,000 and Nazmul ৳60,000.
 Partner signs in through the same `/#/admin` link and sees only investment costs,
 contributions, shares, and amounts due, with no attendance check-in or editing.
 Server RPCs enforce the scope even if someone bypasses the interface.
+
+## Feature update — 30 October 2026
+
+The local app now includes online ordering and staff order management, ingredient
+price history, food-cost graphs and alerts, public-menu costing import, Hard Cash,
+admin-only bKash transfers/deletion, vendor history deletion, additive change-float
+top-ups, account session management, menu SVG export, photo fallback, and improved
+salary printing. Sea Slash branding, database isolation, empty production defaults,
+and partner investment access are retained.
+
+For this existing installation, run **setup/SEA_SLASH_FEATURE_UPDATE.sql** in the
+Sea Slash Supabase SQL Editor. Do not rerun the cold-install file. The update is
+transactional and repeatable; existing ledgers, menu, settings, users, contributions,
+and partner access revocations are preserved. It checks for the Sea Slash owner
+record before running. Regenerate with `node scripts/build-feature-update.mjs`.
+For a fresh installation, run the initial installer first, then this feature update.
+
+Ordering starts paused with blank WhatsApp and bKash numbers. In Online Orders →
+Settings, enter Sea Slash’s own details before enabling orders or bKash payments.
+The customer page is http://localhost:3001/#/order. No live database changes or
+hosting deployment were performed as part of this local feature update.

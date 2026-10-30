@@ -350,7 +350,7 @@ export const MonthlyExpenseView: React.FC<MonthlyExpenseViewProps> = ({
       <div role="tablist" aria-label="Expense views" className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-3 dark:border-slate-800">
         {(['cash', 'daily', 'monthly', 'bkash'] as const).map(value => <button key={value} type="button" role="tab" id={`expense-${value}-tab`} aria-selected={activeView === value} aria-controls={value === 'cash' ? 'expense-cash-panel' : value === 'bkash' ? 'expense-bkash-panel' : 'expense-period-panel'} onClick={() => { setActiveView(value); if (value !== 'cash' && value !== 'bkash') setPeriod(value); }} className={`rounded-md px-4 py-2 text-sm font-semibold ${activeView === value ? 'bg-amber-500 text-slate-950' : 'bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-300'}`}>{value === 'cash' ? 'Daily Cash' : value === 'daily' ? 'Daily Expenses' : value === 'bkash' ? 'bKash Account' : 'Monthly Expenses'}</button>)}
       </div>
-      <BkashAccountView summaryTarget={bkashSummaryTarget} isAdmin={isAdmin} expanded={activeView==='bkash'} onOpen={()=>setActiveView('bkash')} sales={sales} expenses={expenses} vendors={vendors} onAddExpense={onAddExpense}/>
+      <BkashAccountView summaryTarget={bkashSummaryTarget} isAdmin={isAdmin} expanded={activeView==='bkash'} onOpen={()=>setActiveView('bkash')} sales={sales} expenses={expenses} vendors={vendors} onAddExpense={onAddExpense} onDeleteExpense={onDeleteExpense}/>
       {activeView === 'cash' && <DailyCashView settings={settings} onEditSales={onEditSales} sales={sales} expenses={expenses} date={selectedDate} onDateChange={date => { setSelectedDate(date); setSelectedMonth(date.slice(0, 7)); }} />}
       {(activeView === 'daily' || activeView === 'monthly') && <div role="tabpanel" id="expense-period-panel" aria-labelledby={`expense-${period}-tab`} className="space-y-6">
       {/* Period selector */}
@@ -777,7 +777,7 @@ export const MonthlyExpenseView: React.FC<MonthlyExpenseViewProps> = ({
                         setNewStaffId(exp.staffId ?? ""); setSalaryMonth(exp.salaryMonth ?? exp.month); setNewVendorId(exp.vendorId ?? ""); setBillDate(exp.vendorBillDate ?? exp.date); setNewBillId(exp.vendorBillId ?? "");
                         setStatementMonth(exp.statementMonth ?? exp.month); setCommissionDate(exp.commissionDate ?? exp.date); setPaymentReference(exp.paymentReference ?? ""); setError(""); setIsAddModalOpen(true);
                       }}><Pencil className="w-3.5 h-3.5" /></button>}
-                      <button
+                      {(isAdmin || exp.paymentMode !== 'bkash') && <button
                         disabled={busy}
                         onClick={async () => {
                           if (confirm(`Delete "${exp.title}"?`)) {
@@ -800,7 +800,7 @@ export const MonthlyExpenseView: React.FC<MonthlyExpenseViewProps> = ({
                         className="p-1 text-slate-500 hover:text-rose-700 dark:hover:text-rose-400 transition cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      </button>}
                       </>
                     )}
                   </td>

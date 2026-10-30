@@ -14,7 +14,7 @@ function DishPhoto({item, preview}:{item:PublicMenuItem;preview:boolean}) {
   useEffect(()=>setFailed(false),[item.photoUrl]);
   const position=item.name.includes('Rice')||item.name.includes('Biryani')||item.name.includes('Pulao')?'48% 72%':item.name.includes('Naan')?'4% 83%':item.name.includes('Hariyali')?'78% 90%':'95% 75%';
   return <div className="royal-dish-photo">
-    {item.photoUrl && !failed ? preview ? <div className="royal-preview-photo" style={{backgroundImage:'url(/sea-slash-logo.svg)',backgroundPosition:position}} /> : <img src={item.photoUrl} alt="" loading="lazy" decoding="async" onError={()=>setFailed(true)} /> : <UtensilsCrossed aria-hidden="true" size={30} />}
+    {item.photoUrl && !failed ? preview ? <div className="royal-preview-photo" style={{backgroundImage:'url(/menu/royal-feast.png)',backgroundPosition:position}} /> : <img src={item.photoUrl} alt="" loading="lazy" decoding="async" onError={()=>setFailed(true)} /> : <UtensilsCrossed aria-hidden="true" size={30} />}
   </div>;
 }
 export function PublicMenu() {
@@ -55,9 +55,10 @@ export function PublicMenu() {
   return <main className={`royal-menu royal-gallery royal-price-${menu.settings.priceStyle??'ribbon'} ${tvMode?'royal-tv':''}`} onKeyDown={event=>{if((event.target as HTMLElement).tagName==='INPUT')return;if(event.key==='ArrowRight')go(1);if(event.key==='ArrowLeft')go(-1);}}>
     {preview&&<div className="royal-preview-note">DESIGN PREVIEW <span>Sample dishes, photos & prices · Your published menu will replace these.</span><a href="#/admin">Manage your menu ↗</a></div>}
     <header className="royal-header">
-      <a href="#/menu" className="royal-brand" aria-label="Sea Slash menu"><MenuEmblem/><span><strong>Sea Slash</strong><small>SEA SLASH</small></span></a>
+      <a href="#/menu" className="royal-brand" aria-label="Sea Slash menu"><MenuEmblem/><span><strong>Sea Slash</strong><small>INDIAN & KEBAB</small></span></a>
       <div className="royal-header-title"><span className="royal-ornament">✦</span><span>A TASTE OF ROYALTY</span><span className="royal-ornament">✦</span></div>
         <div className="royal-menu-controls"><div className="royal-pagination"><button type="button" aria-label="Previous menu page" disabled={pages.length<2} onClick={()=>go(-1)}><ArrowLeft size={13}/></button><button type="button" aria-label={playing?'Pause menu rotation':'Play menu rotation'} aria-pressed={playing} onClick={()=>setPlaying(value=>!value)}>{playing?<Pause size={12}/>:<Play size={12}/>}</button><button type="button" aria-label="Next menu page" disabled={pages.length<2} onClick={()=>go(1)}><ArrowRight size={13}/></button></div></div>
+      {!tvMode&&!preview&&<a href="#/order" style={{background:'#8f2436',color:'#fff0cc',padding:'9px 14px',borderRadius:8,fontSize:14,fontWeight:700,whiteSpace:'nowrap'}}>Order online ↗</a>}
       <button type="button" className="royal-screen-button" onClick={fullScreen}>{tvMode?<Minimize2 size={17}/>:<Maximize2 size={17}/>}<span>{tvMode?'Exit screen mode':'Full screen'}</span></button>
     </header>
     {notice&&<p role="status" className="royal-notice">{notice}</p>}

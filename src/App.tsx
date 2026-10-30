@@ -1,3 +1,10 @@
+import {HardCashView} from './components/HardCashView';
+import {CustomerOrdering} from './components/CustomerOrdering';
+import {CustomerOrdersView} from './components/CustomerOrdersView';
+import {getPendingOrderCount} from './lib/customerOrders';
+import {OverallCostOverview} from './components/OverallCostOverview';
+import {overallFoodCosts} from './utils/overallFoodCosts';
+import {priceHistoryStartDate} from './utils/itemPriceHistory';
 import {ViewPreferencesProvider,useRememberedViewState} from './lib/useRememberedViewState';
 import {isViewMonth} from './utils/viewPreferences';
 import {staffScheduledHours} from './utils/staffShiftEarnings';
@@ -42,7 +49,7 @@ import { MonthlyExpenseView } from './components/MonthlyExpenseView';
 import { InventoryView } from './components/InventoryView';
 import { StaffPayrollView } from './components/StaffPayrollView';
 import { FoodCourtStatementView } from './components/FoodCourtStatementView';
-import { loadVendorLedger, saveVendorLedger } from './lib/vendorLedger';
+import { loadVendorLedger, saveVendorLedger, deleteVendorHistoryEntry } from './lib/vendorLedger';
 import { expenseVendor, vendorLedgerWithExpensePayments } from './utils/vendorExpensePayments';
 import type { VendorLedgerEntry } from './utils/vendorLedger';
 import { VendorsView, type Vendor } from './components/VendorsView';
@@ -72,7 +79,7 @@ import { removeDemoPurchases } from './utils/demoPurchases';
 import { linkedExpenses } from './utils/linkedExpenses';
 import { recordExpense, deleteExpense } from './lib/expenses';
 import { defaultMenuPricing, validateMenuItem } from './utils/menuPricing';
-import { saveMenuItem, deleteMenuItem, saveMenuPricing, MENU_PRICING_KEY } from './lib/menu';
+import { saveMenuItem, deleteMenuItem, saveMenuPricing, syncPublicMenuCosting, MENU_PRICING_KEY } from './lib/menu';
 
 const STORAGE_KEYS = {
   VENDORS: 'sea_slash_vendors_v1',
@@ -100,6 +107,7 @@ function getStoredState<T>(key: string, fallback: T): T {
 export default function App() {
   const [route,setRoute] = React.useState(window.location.hash);
   React.useEffect(() => { const changed=()=>setRoute(window.location.hash); window.addEventListener('hashchange',changed); return()=>window.removeEventListener('hashchange',changed); },[]);
+  if (route.split('?')[0] === '#/order') return <CustomerOrdering />;
   if (!route.startsWith('#/admin')) return <PublicMenu key={route} />;
   return <StaffApplication />;
 }
@@ -221,6 +229,10 @@ function ManagementApp({ auth }: { auth: ReturnType<typeof useAdminAuth> }) {
 
   // UI state
   const [activeTab, setActiveTab] = useRememberedViewState<string>('section',() => role === 'manager' ? 'pnl' : 'overview',value=>typeof value==='string'&&canAccessSection(role,value));
+  const [costMonitorOpen,setCostMonitorOpen] = useState(false);
+  const [costRiseThreshold,setCostRiseThreshold] = useRememberedViewState<number>('foodCosts.riseThreshold',5,value=>[3,5,10,15,20].includes(Number(value)));
+  const [targetFoodCost,setTargetFoodCost] = useRememberedViewState<number>('foodCosts.targetPercent',35,value=>[25,30,35,40,45,50].includes(Number(value)));
+  const costNotices = React.useMemo(()=>overallFoodCosts(inventory,vendorLedger,purchases,recipes,priceHistoryStartDate(getTodayString(),30),getTodayString(),costRiseThreshold,targetFoodCost),[inventory,vendorLedger,purchases,recipes,costRiseThreshold,targetFoodCost]);
   const needsStaffBudget = ['overview', 'planning', 'breakeven', 'expenses', 'foodcourt'].includes(activeTab);
   const [salaryRequest, setSalaryRequest] = useState<{ staffId: string; month: string } | null>(null);
   const [commissionTracking, setCommissionTracking] = useState<CommissionTracking>(emptyCommissionTracking);
@@ -234,6 +246,13 @@ function ManagementApp({ auth }: { auth: ReturnType<typeof useAdminAuth> }) {
   const [editingSalesRecord, setEditingSalesRecord] = useState<DailySalesRecord | undefined>(undefined);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [hasLoadedRemoteState, setHasLoadedRemoteState] = useState<boolean>(!isSupabaseConfigured);
+  const [pendingOrderCount,setPendingOrderCount] = useState(0);
+  useEffect(()=>{
+    if(!canManage||!hasLoadedRemoteState)return;
+    let active=true;let installed=true;
+    const refresh=()=>{if(document.hidden||!installed)return;void getPendingOrderCount().then(count=>{if(active)setPendingOrderCount(count);}).catch(()=>{installed=false;});};
+    refresh();const timer=window.setInterval(refresh,20000);return()=>{active=false;window.clearInterval(timer);};
+  },[canManage,hasLoadedRemoteState]);
   const [syncStatus, setSyncStatus] = useState<string>(
     isSupabaseConfigured ? 'Connecting to Supabase...' : 'Local mode: add Supabase env vars to sync online'
   );
@@ -612,6 +631,7 @@ function ManagementApp({ auth }: { auth: ReturnType<typeof useAdminAuth> }) {
     <div className="app-shell min-h-screen bg-slate-50 dark:bg-[#0b0f17] text-slate-800 dark:text-slate-200 flex flex-col selection:bg-amber-500/30 selection:text-amber-800 dark:selection:text-amber-200">
       {/* Header with Navigation and Quick Actions */}
       <Header
+        pendingOrderCount={pendingOrderCount}
         dueNotices={canManage && hasLoadedRemoteState ? courtDueNotices(getTodayString().slice(0, 7), salesHistory, expenses, settings, commissionTracking) : []}
         onOpenStatement={month => { setStatementMonth(month); setActiveTab('foodcourt'); }}
         isAdmin={isAdmin}
@@ -630,8 +650,20 @@ function ManagementApp({ auth }: { auth: ReturnType<typeof useAdminAuth> }) {
 
       {/* Main View Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {canManage && hasLoadedRemoteState && (costNotices.ingredientAlerts.length > 0 || costNotices.recipeAlerts.length > 0) && <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"><p><strong>Food cost alert:</strong> {costNotices.ingredientAlerts.length} ingredient price rise(s) · {costNotices.recipeAlerts.length} menu price review(s).</p><button onClick={()=>setCostMonitorOpen(true)} className="rounded-md bg-amber-600 px-3 py-2 font-semibold text-white">View cost alerts & graph</button></div>}
+        {canManage && costMonitorOpen && <OverallCostOverview inventory={inventory} ledger={vendorLedger} purchases={purchases} recipes={recipes} threshold={costRiseThreshold} target={targetFoodCost} onThreshold={setCostRiseThreshold} onTarget={setTargetFoodCost} onClose={()=>setCostMonitorOpen(false)}/>}
+        {canManage && pendingOrderCount>0 && activeTab!=='orders' && <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950"><strong>{pendingOrderCount} online order(s) waiting for confirmation</strong><button onClick={()=>setActiveTab('orders')} className="rounded-lg bg-emerald-700 px-3 py-2 font-semibold text-white">View orders</button></div>}
+        {activeTab==='hardcash' && isAdmin && <HardCashView/>}
+        {activeTab==='orders' && canManage && <CustomerOrdersView isAdmin={isAdmin}/>}
         {activeTab === 'publicmenu' && isAdmin && <PublicMenuEditor recipes={recipes} />}
-        {activeTab === 'vendors' && canManage && <VendorsView inventoryCategories={inventoryCategories} inventory={inventory} isAdmin={isAdmin} vendors={vendors} ledger={displayVendorLedger} onSaveLedger={async entry => {
+        {activeTab === 'vendors' && canManage && <VendorsView inventoryCategories={inventoryCategories} inventory={inventory} isAdmin={isAdmin} vendors={vendors} ledger={displayVendorLedger} onDeleteLedger={async entry => {
+          if (!isAdmin || !hasLoadedRemoteState) throw new Error('Administrator access and a database connection are required.');
+          const result = await deleteVendorHistoryEntry(entry, expenses.find(expense => expense.id === entry.sourceExpenseId));
+          setVendorLedger(result.ledger);
+          setExpenses(result.expenses);
+          syncedVendorInventory.current = result.inventory;
+          setInventory(result.inventory);
+        }} onSaveLedger={async entry => {
           if (!canManage || !hasLoadedRemoteState) throw new Error('Administrator or manager access and a database connection are required.');
           if (!isAdmin && (entry.balanceAdjustment !== undefined || vendorLedger.some(row => row.id === entry.id && row.balanceAdjustment !== undefined))) throw new Error('Administrator access required to override vendor balances.');
           if (!vendors.some(vendor => vendor.id === entry.vendorId)) throw new Error('Vendor no longer exists.');
@@ -728,6 +760,7 @@ function ManagementApp({ auth }: { auth: ReturnType<typeof useAdminAuth> }) {
 
         {activeTab === 'inventory' && (
           <InventoryView
+            onOpenCostOverview={()=>setCostMonitorOpen(true)}
             isAdmin={isAdmin}
             onAdminLogin={() => setIsAdminLoginOpen(true)}
             onDeleteIngredient={handleDeleteIngredient}
@@ -799,6 +832,10 @@ function ManagementApp({ auth }: { auth: ReturnType<typeof useAdminAuth> }) {
             onSaveRecipe={handleSaveMenuItem}
             onDeleteRecipe={handleDeleteMenuItem}
             onSavePricing={handleSaveMenuPricing}
+            onSyncPublicMenu={async () => {
+              if (!isAdmin || !hasLoadedRemoteState) throw new Error('Wait for the administrator connection before loading the public menu.');
+              setRecipes(await syncPublicMenuCosting());
+            }}
             staff={staffList}
           />
         )}

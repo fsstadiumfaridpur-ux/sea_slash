@@ -1,7 +1,8 @@
+import {preparePhotoWithFallback} from '../utils/preparePhotoFallback';
 import {supabase} from './supabase';
 import {removeDishBackground} from './menuPhotoPreparation';
 import {uploadMenuPhoto} from './publicMenu';
-export interface GeneratedMenuPhoto {photoUrl:string;sourcePhotoUrl:string;custom:boolean}
+export interface GeneratedMenuPhoto {photoUrl:string;sourcePhotoUrl:string;custom:boolean;preparation?:'cutout'|'original'}
 export type GeneratedMenuPhotos=Record<string,GeneratedMenuPhoto>;
 const key='sea_slash_generated_menu_photos_v1';
 const table=import.meta.env.VITE_SUPABASE_APP_STATE_TABLE||'app_state';
@@ -47,6 +48,10 @@ export async function prepareGeneratedMenuPhoto(file:File):Promise<string>{
   return uploadMenuPhoto(cutout);
 }
 
+export function prepareGeneratedMenuPhotoForBoard(file:File,skipAI=false){
+  return preparePhotoWithFallback(file,{transparent:transparentDish,remove:removeDishBackground,upload:uploadMenuPhoto},skipAI);
+}
+
 const logoKey='sea_slash_generated_menu_logo_v1';
 interface MenuLogoState {url:string;cutouts:Record<string,string>}
 async function readLogoState(){
@@ -82,6 +87,6 @@ export async function ensureGeneratedMenuLogo(source:string):Promise<string>{
   const {state}=await readLogoState();const cached=state.cutouts[source];if(cached)return cached;if(Object.values(state.cutouts).includes(source))return source;
   let file:File;if(source.startsWith('/')){const response=await fetch(source);if(!response.ok)throw new Error('Could not load logo.');const blob=await response.blob();file=new File([blob],'logo',{type:blob.type});}else file=await fetchGeneratedMenuPhoto(source);
   let transparent=await transparentDish(file);if(!transparent){const plain=await removePlainLogoBackground(file);if(plain)transparent=await transparentDish(plain);}
-  const url=transparent?await uploadMenuPhoto(transparent):await prepareGeneratedMenuPhoto(file);
+  const url=transparent?await uploadMenuPhoto(transparent):(await prepareGeneratedMenuPhotoForBoard(file)).photoUrl;
   await saveGeneratedMenuLogo(url,source);return url;
 }

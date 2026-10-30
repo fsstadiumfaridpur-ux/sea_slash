@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Download, Printer } from 'lucide-react';
 import type { StaffSalarySheet } from '../utils/staffSalarySheet';
-import { salarySheetText, salaryTime } from '../utils/staffSalarySheet';
+import { salaryTime } from '../utils/staffSalarySheet';
 import { durationClock } from '../utils/staffShiftEarnings';
 import { formatBDT } from '../utils/formatters';
-import { printStaffDocument } from '../utils/staffPayroll';
+import {printStaffSalarySheet} from '../utils/staffSalaryPrint';
 import { downloadStaffSalaryExcel } from '../utils/staffSalaryExcel';
 
 export function StaffSalarySheetView({ sheet, restaurant, onRecordPayment }: { sheet: StaffSalarySheet; restaurant: string; onRecordPayment?: () => void }) {
@@ -12,7 +12,7 @@ export function StaffSalarySheetView({ sheet, restaurant, onRecordPayment }: { s
   const [exporting, setExporting] = useState(false);
   return <section className="space-y-4" aria-label={`Monthly salary sheet for ${sheet.staff.name}`}>
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-lg font-semibold">{sheet.staff.name} · {sheet.month}</h3><p className="text-xs text-slate-500">{sheet.staff.role} · Base salary {formatBDT(sheet.staff.baseSalary)} / {sheet.staff.salaryType}</p></div><div className="flex gap-2">
-      <button type="button" onClick={() => { try { printStaffDocument(`${sheet.staff.name} salary / ${sheet.month}`, salarySheetText(sheet, restaurant)); } catch (cause) { setError((cause as Error).message); } }} className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700"><Printer size={16} />Print Sheet</button>
+      <button type="button" onClick={() => { try { printStaffSalarySheet(sheet, restaurant); } catch (cause) { setError((cause as Error).message); } }} className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700"><Printer size={16} />Print Sheet</button>
       <button type="button" disabled={exporting} onClick={async () => { setExporting(true); setError(''); try { await downloadStaffSalaryExcel([sheet],restaurant); } catch (cause) { setError((cause as Error).message); } finally { setExporting(false); } }} className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-slate-700"><Download size={16} />{exporting ? 'Exporting...' : 'Export Excel'}</button>
     </div></header>
     {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}

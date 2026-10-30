@@ -4,6 +4,7 @@ import React from 'react';
 import { RestaurantLogo } from './RestaurantLogo';
 import {
   BookOpen,
+  ShoppingBag,
   UtensilsCrossed,
   DollarSign,
   Receipt,
@@ -25,6 +26,7 @@ import { formatBDT, getTodayString } from '../utils/formatters';
 import { canAccessSection, type RestaurantRole } from '../utils/access';
 
 interface HeaderProps {
+  pendingOrderCount?: number;
   dueNotices?: CourtDueNotice[];
   onOpenStatement?: (month: string) => void;
   role: RestaurantRole;
@@ -42,6 +44,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  pendingOrderCount = 0,
   dueNotices = [],
   onOpenStatement,
   role,
@@ -61,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
   const todayRecord = salesHistory.find(r => r.date === todayStr);
 
   const navItems = [
+    { id: 'orders', label: 'Online Orders', icon: ShoppingBag, badge: pendingOrderCount || undefined },
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'pnl', label: role === 'admin' ? 'Sales & Profit' : 'Sales & Cash', icon: DollarSign },
     { id: 'expenses', label: 'Expenses', icon: Receipt },
@@ -72,6 +76,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'investment', label: 'Total Investment', icon: Wallet },
     { id: 'vendors', label: 'Vendors', icon: Store },
     { id: 'publicmenu', label: 'Public Menu', icon: BookOpen },
+    { id: 'hardcash', label: 'Hard Cash', icon: Wallet },
   ].filter(tab => canAccessSection(role, tab.id));
 
   return (

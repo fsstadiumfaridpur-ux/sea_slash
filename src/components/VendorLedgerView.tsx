@@ -1,17 +1,19 @@
+import {useRememberedViewState} from '../lib/useRememberedViewState';
+import {isViewDate} from '../utils/viewPreferences';
 import {vendorStockUpdateMode} from '../utils/vendorLedger';
 import type { InventoryItem, InventoryCategoryDefinition } from '../types';
 import { matchingInventoryNames, suggestInventory, suggestVendorDescriptions, normalizedDescription, inventoryUnitFactor } from '../utils/inventorySuggestions';
 import { buildVendorLedgerExcel, vendorLedgerExcelFilename } from '../utils/vendorLedgerExcel';
 import { roundMoney } from '../utils/money';
 import { useState } from 'react';
-import { ArrowLeft, Download, ChevronDown, ChevronUp, Pencil, Plus, Save, X } from 'lucide-react';
+import { ArrowLeft, Download, ChevronDown, ChevronUp, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import type { Vendor } from './VendorsView';
 import { NumericInput } from './NumericInput';
 import { formatBDT, formatNumber, formatDatePretty, getTodayString } from '../utils/formatters';
 import { vendorBillUnits, vendorUnitPrice, vendorBillDetails, type VendorBillUnit, sortVendorLedgerByDate, validateVendorLedgerEntry, vendorBillTotal, vendorLedgerSummary, type VendorLedgerEntry } from '../utils/vendorLedger';
 
 const inputClass = 'mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900';
-export function VendorLedgerView({ vendor, entries, inventory, inventoryCategories, canEdit, canOverride, onBack, onSave }: {
+export function VendorLedgerView({ vendor, entries, inventory, inventoryCategories, canEdit, canOverride, onBack, onSave, onDelete }: {
   vendor: Vendor;
   entries: VendorLedgerEntry[];
   inventory: InventoryItem[];
@@ -19,8 +21,10 @@ export function VendorLedgerView({ vendor, entries, inventory, inventoryCategori
   canEdit: boolean;
   canOverride: boolean;
   onBack: () => void;
+  onDelete: (entry: VendorLedgerEntry) => Promise<void>;
   onSave: (entry: VendorLedgerEntry) => Promise<void>;
 }) {
+  const [entryDate,setEntryDate]=useRememberedViewState('vendors.entryDate',getTodayString,isViewDate);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [targetBalance, setTargetBalance] = useState(0);
   const [adjustReason, setAdjustReason] = useState('');
@@ -39,6 +43,7 @@ export function VendorLedgerView({ vendor, entries, inventory, inventoryCategori
   const [newCategoryName, setNewCategoryName] = useState('');
   const stockFactor = linkedItem && draft?.unit ? inventoryUnitFactor(draft.unit, linkedItem.unit) : null;
   const receivedQuantity = stockFactor === null ? draft?.inventoryQuantity ?? 0 : Number(((draft?.quantity ?? 0) * stockFactor).toFixed(6));
+  const [deleting, setDeleting] = useState<VendorLedgerEntry | null>(null);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
@@ -48,7 +53,7 @@ export function VendorLedgerView({ vendor, entries, inventory, inventoryCategori
   const records = sortVendorLedgerByDate(entries.filter(entry => entry.vendorId === vendor.id));
   const dailyNewestFirst = [...summary.daily].reverse();
   const visibleDays = dailyExpanded ? dailyNewestFirst : dailyNewestFirst.slice(0, 2);
-  const newEntry = () => { setError(''); setCalculationBasis('total'); setSuggestionsOpen(false); setCreateInventory(false); setNewItemCategory("uncategorized"); setNewCategoryName(""); setDraft({ id: crypto.randomUUID(), vendorId: vendor.id, date: getTodayString(), description: '', quantity: 0, unit: 'kg', unitPrice: 0, billed: 0, paid: 0 }); };
+  const newEntry = () => { setError(''); setCalculationBasis('total'); setSuggestionsOpen(false); setCreateInventory(false); setNewItemCategory("uncategorized"); setNewCategoryName(""); setDraft({ id: crypto.randomUUID(), vendorId: vendor.id, date: entryDate, description: '', quantity: 0, unit: 'kg', unitPrice: 0, billed: 0, paid: 0 }); };
   async function exportExcel() {
     if (exporting) return;
     setExporting(true); setError('');
@@ -140,25 +145,39 @@ export function VendorLedgerView({ vendor, entries, inventory, inventoryCategori
               <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400"><span>Bills: {formatBDT(day.billed)}</span><span>Paid: {formatBDT(day.paid)}</span></p>
             </div>
             <div id={contentId} hidden={!expanded}>
-              {expanded && (<div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-slate-200 dark:border-slate-800"><tr>{['Date', 'Description / Bill Reference', 'Quantity / Unit', 'Unit Price', 'Bill', 'Paid', ...(canEdit ? ['Actions'] : [])].map(label => <th key={label} className="whitespace-nowrap px-3 py-3 font-medium">{label}</th>)}</tr></thead><tbody>{dayRecords.map(entry => <tr key={entry.id} className="border-b border-slate-200 dark:border-slate-800"><td className="whitespace-nowrap px-3 py-3">{formatDatePretty(entry.date)}</td><td className="min-w-44 px-3 py-3 break-words">{entry.description}{entry.sourceExpenseId && <span className="block text-xs text-emerald-700">Payment from Daily Expenses · Edit in Expenses</span>}{entry.inventoryItemId && <span className="block text-xs text-emerald-700">Stock received: {formatNumber(entry.inventoryQuantity ?? 0)} {entry.inventoryUnit}</span>}{entry.balanceAdjustment !== undefined && <span className="block text-xs text-amber-700">Balance adjustment: {formatBDT(entry.balanceAdjustment)}</span>}</td><td className="px-3 py-3">{vendorBillDetails(entry) ? `${formatNumber(vendorBillDetails(entry)!.quantity ?? 0)} ${vendorBillDetails(entry)!.unit}` : '—'}</td><td className="px-3 py-3">{vendorBillDetails(entry) ? `${formatBDT(vendorBillDetails(entry)!.unitPrice ?? 0)} / ${vendorBillDetails(entry)!.unit}` : '—'}</td><td className="px-3 py-3">{formatBDT(entry.billed)}</td><td className="px-3 py-3">{formatBDT(entry.paid)}</td>{canEdit && <td className="px-3 py-3"><button disabled={!!entry.sourceExpenseId || entry.balanceAdjustment !== undefined} title={entry.sourceExpenseId ? "Edit the original payment in Expenses" : "Edit bill or payment"} aria-label={`Edit ${entry.description}`} onClick={() => { setError(''); setCreateInventory(false); setNewItemCategory("uncategorized"); setNewCategoryName(""); setCalculationBasis('total'); const details = vendorBillDetails(entry); setDraft({ ...entry, quantityKg: undefined, pricePerKg: undefined, quantity: details?.quantity, unitPrice: details?.unitPrice, unit: details?.unit }); }} className="p-2"><Pencil size={16} /></button></td>}</tr>)}</tbody></table></div>)}
+              {expanded && (<div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-slate-200 dark:border-slate-800"><tr>{['Date', 'Description / Bill Reference', 'Quantity / Unit', 'Unit Price', 'Bill', 'Paid', ...(canEdit ? ['Actions'] : [])].map(label => <th key={label} className="whitespace-nowrap px-3 py-3 font-medium">{label}</th>)}</tr></thead><tbody>{dayRecords.map(entry => <tr key={entry.id} className="border-b border-slate-200 dark:border-slate-800"><td className="whitespace-nowrap px-3 py-3">{formatDatePretty(entry.date)}</td><td className="min-w-44 px-3 py-3 break-words">{entry.description}{entry.sourceExpenseId && <span className="block text-xs text-emerald-700">Payment from Daily Expenses · Edit in Expenses</span>}{entry.inventoryItemId && <span className="block text-xs text-emerald-700">Stock received: {formatNumber(entry.inventoryQuantity ?? 0)} {entry.inventoryUnit}</span>}{entry.balanceAdjustment !== undefined && <span className="block text-xs text-amber-700">Balance adjustment: {formatBDT(entry.balanceAdjustment)}</span>}</td><td className="px-3 py-3">{vendorBillDetails(entry) ? `${formatNumber(vendorBillDetails(entry)!.quantity ?? 0)} ${vendorBillDetails(entry)!.unit}` : '—'}</td><td className="px-3 py-3">{vendorBillDetails(entry) ? `${formatBDT(vendorBillDetails(entry)!.unitPrice ?? 0)} / ${vendorBillDetails(entry)!.unit}` : '—'}</td><td className="px-3 py-3">{formatBDT(entry.billed)}</td><td className="px-3 py-3">{formatBDT(entry.paid)}</td>{canEdit && <td className="px-3 py-3"><button disabled={!!entry.sourceExpenseId || entry.balanceAdjustment !== undefined} title={entry.sourceExpenseId ? "Edit the original payment in Expenses" : "Edit bill or payment"} aria-label={`Edit ${entry.description}`} onClick={() => { setError(''); setCreateInventory(false); setNewItemCategory("uncategorized"); setNewCategoryName(""); setCalculationBasis('total'); const details = vendorBillDetails(entry); setDraft({ ...entry, quantityKg: undefined, pricePerKg: undefined, quantity: details?.quantity, unitPrice: details?.unitPrice, unit: details?.unit }); }} className="p-2"><Pencil size={16} /></button>{canOverride && <button type="button" disabled={busy} title="Delete bill or payment (Admin only)" aria-label={`Delete ${entry.description}`} onClick={() => { setError(''); setDeleting(entry); }} className="p-2 text-red-600 disabled:opacity-40"><Trash2 size={16} /></button>}</td>}</tr>)}</tbody></table></div>)}
             </div>
           </div>;
         })}
         {!records.length && <p className="py-8 text-center text-sm text-slate-500">No bills or payments recorded yet.</p>}
       </div>
     </section>
+    {deleting && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div role="dialog" aria-modal="true" aria-labelledby="delete-vendor-heading" className="w-full max-w-md space-y-4 rounded-lg bg-white p-5 dark:bg-slate-950">
+      <h2 id="delete-vendor-heading" className="text-lg font-semibold">Delete bill / payment?</h2>
+      <p className="text-sm">{deleting.description} · {formatDatePretty(deleting.date)}</p>
+      <p className="text-sm">Bill: {formatBDT(deleting.billed)} · Paid: {formatBDT(deleting.paid)}</p>
+      <p className="text-sm text-slate-500">This permanently deletes the entry and recalculates the vendor balance.{deleting.sourceExpenseId ? ' The original Daily Expense will also be deleted, updating expense totals and any linked bKash balance.' : deleting.inventoryItemId ? ' Older stock receipts may adjust linked inventory; replacement-stock bills leave current stock unchanged.' : ''}</p>
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      <div className="flex justify-end gap-3"><button type="button" disabled={busy} onClick={() => { setDeleting(null); setError(''); }} className="rounded-md border px-3 py-2 text-sm">Cancel</button><button type="button" disabled={busy || !canOverride} onClick={async () => {
+        if (!canOverride || busy) return;
+        setBusy(true); setError('');
+        try { await onDelete(deleting); setDeleting(null); }
+        catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not delete entry.'); }
+        finally { setBusy(false); }
+      }} className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">{busy ? 'Deleting...' : 'Delete entry'}</button></div>
+    </div></div>}
     {draft && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><form role="dialog" aria-modal="true" aria-label="Vendor bill or payment" onSubmit={save} className="max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto rounded-lg bg-white p-5 dark:bg-slate-950">
       <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Bill / Payment — {vendor.name}</h2><button type="button" disabled={busy} aria-label="Close bill or payment" onClick={() => setDraft(null)} className="p-2"><X size={20} /></button></div>
-      <label className="block text-sm">Date<input type="date" required className={inputClass} value={draft.date} onChange={event => setDraft({ ...draft, date: event.target.value })} /></label>
+      <label className="block text-sm">Date<input aria-label="Vendor bill date" type="date" required className={inputClass} value={draft.date} onChange={event => {const date=event.target.value;setDraft({ ...draft, date });if(isViewDate(date))setEntryDate(date);}} /></label>
       <label className="block text-sm">Description / Bill Reference<input autoFocus required maxLength={500} className={inputClass} value={draft.description} role="combobox" aria-autocomplete="list" aria-controls="vendor-inventory-suggestions" aria-expanded={suggestionsOpen && hasSuggestions} onKeyDown={event => { if (event.key === "Escape") setSuggestionsOpen(false); }} autoComplete="off" onFocus={() => setSuggestionsOpen(true)} onChange={event => { setSuggestionsOpen(true); setDraft({ ...draft, description: event.target.value }); }} /></label>
       {suggestionsOpen && hasSuggestions && <div id="vendor-inventory-suggestions" role="listbox" aria-label="Description suggestions" className="max-h-48 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700">{suggestions.map(item => <button key={item.id} type="button" role="option" aria-selected={item.id === draft.inventoryItemId} className="block w-full px-3 py-2 text-left text-sm hover:bg-amber-50 dark:hover:bg-slate-800" onClick={() => {
         setSuggestionsOpen(false); setCreateInventory(false);
         setDraft({ ...draft, description: item.name, inventoryItemId: item.id, inventoryUnit: item.unit, inventoryQuantity: undefined, quantity: draft.quantity ?? 0, unit: (draft.quantity ? draft.unit : item.unit === 'gram' ? 'g' : item.unit) as VendorBillUnit, unitPrice: draft.unitPrice ?? 0 });
-      }}><span className="font-medium">{item.name}{item.banglaName ? ` / ${item.banglaName}` : ''}</span><span className="block text-xs text-slate-500">In stock: {formatNumber(item.currentStock)} {item.unit}</span></button>)}{savedDescriptions.map(saved => <button key={`description:${normalizedDescription(saved.description)}`} type="button" role="option" aria-selected={draft.description === saved.description} className="block w-full px-3 py-2 text-left text-sm hover:bg-amber-50 dark:hover:bg-slate-800" onClick={() => {
+      }}><span className="font-medium">{item.name}{item.banglaName ? ` / ${item.banglaName}` : ''}</span><span className="block text-xs text-slate-500">In stock: {formatNumber(item.currentStock)} {item.unit} · Last stock price: {formatBDT(item.unitCost)} / {item.unit}</span></button>)}{savedDescriptions.map(saved => {const savedItem=inventory.find(item=>item.id===saved.inventoryItemId);return <button key={`description:${normalizedDescription(saved.description)}`} type="button" role="option" aria-selected={draft.description === saved.description} className="block w-full px-3 py-2 text-left text-sm hover:bg-amber-50 dark:hover:bg-slate-800" onClick={() => {
         const item = inventory.find(row => row.id === saved.inventoryItemId);
         setSuggestionsOpen(false);
         setDraft({ ...draft, description: saved.description, inventoryItemId: item?.id, inventoryUnit: item?.unit, inventoryQuantity: undefined, quantity: item ? draft.quantity ?? 0 : draft.quantity, unitPrice: item ? draft.unitPrice ?? 0 : draft.unitPrice, unit: !item && draft.quantity === undefined ? undefined : draft.quantity ? draft.unit : saved.unit ?? (item?.unit === 'gram' ? 'g' : item?.unit) ?? draft.unit });
-      }}><span className="font-medium">{saved.description}</span><span className="block text-xs text-slate-500">Saved description{saved.unit ? ` · ${saved.unit}` : ''}{saved.inventoryItemId ? ' · Linked inventory item' : ''}</span></button>)}</div>}
+      }}><span className="font-medium">{saved.description}</span><span className="block text-xs text-slate-500">{savedItem ? `In stock: ${formatNumber(savedItem.currentStock)} ${savedItem.unit} · Last stock price: ${formatBDT(savedItem.unitCost)} / ${savedItem.unit}` : `Saved description${saved.unit ? ` · ${saved.unit}` : ''}`}</span></button>;})}</div>}
       {isNewDescription && <p className="text-xs text-amber-700 dark:text-amber-400">New description — it will appear in suggestions after you save this bill/payment.</p>}
       {draft.inventoryItemId && !inventory.some(item => item.id === draft.inventoryItemId) && <p className="text-xs text-slate-500">The previous inventory item was deleted. Select an existing item or create a new one below. Its stock will be updated without reversing the deleted item's stock.</p>}
       {!linkedItem && !missingInventoryItem && <p className="text-xs text-slate-500">Select the existing inventory suggestion to update its stock.</p>}

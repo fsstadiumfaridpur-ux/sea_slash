@@ -1,4 +1,4 @@
-export interface CachedMenuPhoto {photoUrl:string;sourcePhotoUrl:string;custom:boolean}
+export interface CachedMenuPhoto {photoUrl:string;sourcePhotoUrl:string;custom:boolean;preparation?:'cutout'|'original'}
 export function reusableMenuPhoto(photos:Record<string,CachedMenuPhoto>,id:string,source:string):CachedMenuPhoto|undefined {
   const own=photos[id];
   if(own&&(own.custom||own.sourcePhotoUrl===source))return own;

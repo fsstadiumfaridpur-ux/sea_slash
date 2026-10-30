@@ -1,5 +1,5 @@
-import { NumericInput } from './NumericInput';
-import React, { useState } from "react";
+import { NumericInput } from "./NumericInput";
+import React, { useState, useEffect } from "react";
 import {
   Plus,
   Trash2,
@@ -10,6 +10,8 @@ import {
   X,
   Settings2,
   Search,
+  RefreshCw,
+  Image as ImageIcon,
 } from "lucide-react";
 import type {
   FoodCourtSettings,
@@ -27,6 +29,7 @@ import {
 } from "../utils/menuPricing";
 
 interface Props {
+  onSyncPublicMenu: () => Promise<void>;
   settings: FoodCourtSettings;
   inventory: InventoryItem[];
   recipes: RecipeItem[];
@@ -59,7 +62,28 @@ export function BreakEvenCalculator({
   onSaveRecipe,
   onDeleteRecipe,
   onSavePricing,
+  onSyncPublicMenu,
 }: Props) {
+  const [catalogBusy, setCatalogBusy] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
+  const syncCatalog = async () => {
+    setCatalogBusy(true);
+    setCatalogError("");
+    try {
+      await onSyncPublicMenu();
+    } catch (failure) {
+      setCatalogError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not load the public menu.",
+      );
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+  useEffect(() => {
+    if (ready) void syncCatalog();
+  }, [ready]);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"menu" | "calculator">("menu");
   const [draft, setDraft] = useState<RecipeItem | null>(null);
@@ -163,14 +187,34 @@ export function BreakEvenCalculator({
     }
   };
   const remove = async (recipe: RecipeItem) => {
-    if (!window.confirm(`Delete ${recipe.dishName} from the saved menu?`))
+    if (
+      !window.confirm(
+        recipe.publicMenuItemId
+          ? `Clear the recipe for ${recipe.dishName}? Its photo, menu price and public menu item will stay.`
+          : `Delete ${recipe.dishName} from the saved menu?`,
+      )
+    )
       return;
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await onDeleteRecipe(recipe.id);
-      setNotice(`${recipe.dishName} removed from the saved menu.`);
+      if (recipe.publicMenuItemId) {
+        await onSaveRecipe({
+          ...recipe,
+          ingredients: [],
+          costingMode: "recipe",
+          directCost: undefined,
+          extraPortionCost: 0,
+          estimatedCOGS: 0,
+        });
+        setNotice(
+          `${recipe.dishName}: recipe cleared. Add ingredients when ready.`,
+        );
+      } else {
+        await onDeleteRecipe(recipe.id);
+        setNotice(`${recipe.dishName} removed from the saved menu.`);
+      }
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -246,10 +290,24 @@ export function BreakEvenCalculator({
         <div>
           <h2 className="text-xl font-semibold">Saved Menu & Pricing</h2>
           <p className="mt-1 text-xs text-slate-500">
-            {recipes.length} saved menu items / Costs and profit per portion
+            {recipes.length} saved menu items / Add recipes to calculate food
+            cost and profit.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            disabled={!ready || busy || catalogBusy}
+            onClick={() => {
+              if (canDiscard()) {
+                setDraft(null);
+                void syncCatalog();
+              }
+            }}
+            className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 disabled:opacity-50"
+          >
+            <RefreshCw size={16} />
+            {catalogBusy ? "Loading menu..." : "Refresh from Public Menu"}
+          </button>
           <button
             title="Cost setup"
             aria-label="Cost setup"
@@ -270,7 +328,7 @@ export function BreakEvenCalculator({
             Export Menu
           </button>
           <button
-            disabled={!ready || busy}
+            disabled={!ready || busy || catalogBusy}
             onClick={() => openEditor()}
             className="flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
           >
@@ -279,6 +337,16 @@ export function BreakEvenCalculator({
           </button>
         </div>
       </header>
+      <p className="text-xs text-slate-500">
+        Photos, names and selling prices are loaded from Public Menu, including
+        hidden and unavailable dishes. Existing recipes are preserved. Update
+        photos and live prices in Public Menu; add ingredients here when ready.
+      </p>
+      {catalogError && (
+        <p role="alert" className="text-sm text-rose-600">
+          {catalogError} Use “Refresh from Public Menu” to retry.
+        </p>
+      )}
       {notice && (
         <p
           role="status"
@@ -420,7 +488,7 @@ export function BreakEvenCalculator({
         <button
           role="tab"
           aria-selected={view === "calculator"}
-          disabled={busy || !ready}
+          disabled={busy || !ready || catalogBusy}
           onClick={() => {
             if (view !== "calculator") openEditor(recipes[0], true);
           }}
@@ -487,27 +555,51 @@ export function BreakEvenCalculator({
                       key={recipe.id}
                       className="border-b border-slate-200 dark:border-slate-800"
                     >
-                      <td className="min-w-44 max-w-64 break-words px-3 py-4">
-                        <button
-                          onClick={() => openEditor(recipe)}
-                          disabled={!ready || busy}
-                          className="text-left font-semibold underline decoration-slate-300 underline-offset-4"
-                        >
-                          {recipe.dishName}
-                        </button>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {recipe.portionSize}
-                        </p>
-                        {recipe.costingMode === "direct" && (
-                          <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
-                            Direct cost
-                          </p>
-                        )}
-                        {f.foodCost === null && (
-                          <p className="mt-1 text-xs text-rose-600">
-                            Costing incomplete
-                          </p>
-                        )}
+                      <td className="min-w-64 max-w-80 break-words px-3 py-4">
+                        <div className="flex items-start gap-3">
+                          {recipe.photoUrl ? (
+                            <img
+                              src={recipe.photoUrl}
+                              alt={recipe.dishName}
+                              loading="lazy"
+                              className="h-16 w-16 shrink-0 rounded-lg bg-slate-100 object-contain dark:bg-slate-800"
+                            />
+                          ) : (
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400 dark:bg-slate-800">
+                              <ImageIcon size={22} />
+                            </div>
+                          )}
+                          <div>
+                            <button
+                              onClick={() => openEditor(recipe)}
+                              disabled={!ready || busy || catalogBusy}
+                              className="text-left font-semibold underline decoration-slate-300 underline-offset-4"
+                            >
+                              {recipe.dishName}
+                            </button>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {recipe.portionSize}
+                            </p>
+                            {recipe.costingMode === "direct" && (
+                              <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                                Direct cost
+                              </p>
+                            )}
+                            {recipe.menuCategory && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {recipe.menuCategory}
+                              </p>
+                            )}
+                            {f.foodCost === null && (
+                              <p className="mt-1 text-xs text-rose-600">
+                                {recipe.costingMode !== "direct" &&
+                                !recipe.ingredients.length
+                                  ? "Recipe needed"
+                                  : "Costing incomplete"}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-3 py-4 tabular-nums">
                         {money(f.foodCost)}
@@ -538,16 +630,20 @@ export function BreakEvenCalculator({
                           <button
                             title="Edit menu item"
                             aria-label={`Edit ${recipe.dishName}`}
-                            disabled={busy || !ready}
+                            disabled={busy || !ready || catalogBusy}
                             onClick={() => openEditor(recipe)}
                             className="p-2"
                           >
                             <Pencil size={16} />
                           </button>
                           <button
-                            title="Delete menu item"
-                            aria-label={`Delete ${recipe.dishName}`}
-                            disabled={busy || !ready}
+                            title={
+                              recipe.publicMenuItemId
+                                ? "Clear recipe"
+                                : "Delete menu item"
+                            }
+                            aria-label={`${recipe.publicMenuItemId ? "Clear recipe for" : "Delete"} ${recipe.dishName}`}
+                            disabled={busy || !ready || catalogBusy}
                             onClick={() => remove(recipe)}
                             className="p-2 text-rose-600"
                           >
@@ -648,6 +744,7 @@ export function BreakEvenCalculator({
                         Dish Name
                         <input
                           required
+                          disabled={!!draft.publicMenuItemId}
                           value={draft.dishName}
                           onChange={(e) => update({ dishName: e.target.value })}
                           className={`${inputClass} mt-1`}
@@ -910,7 +1007,14 @@ export function BreakEvenCalculator({
                     )}
                     <label className="block text-xs font-medium">
                       Selling Price (BDT)
+                      {draft.publicMenuItemId && (
+                        <span className="block mt-1 font-normal text-slate-500">
+                          From Public Menu. Change the live price there, then
+                          refresh this list.
+                        </span>
+                      )}
                       <NumericInput
+                        disabled={!!draft.publicMenuItemId}
                         required
                         type="number"
                         min="0"
@@ -954,8 +1058,18 @@ export function BreakEvenCalculator({
                     </dl>
                     <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
                       <div className="mb-2 flex items-center justify-between gap-3">
-                        <label htmlFor="target-profit-margin" className="text-sm font-semibold">Target Profit Margin</label>
-                        <output htmlFor="target-profit-margin" className="text-sm font-semibold tabular-nums">{margin}%</output>
+                        <label
+                          htmlFor="target-profit-margin"
+                          className="text-sm font-semibold"
+                        >
+                          Target Profit Margin
+                        </label>
+                        <output
+                          htmlFor="target-profit-margin"
+                          className="text-sm font-semibold tabular-nums"
+                        >
+                          {margin}%
+                        </output>
                       </div>
                       <div className="px-2">
                         <input
@@ -969,8 +1083,12 @@ export function BreakEvenCalculator({
                           onChange={(e) => setMargin(Number(e.target.value))}
                           className="block h-8 w-full cursor-pointer accent-amber-500"
                         />
-                        <div aria-hidden="true" className="flex justify-between text-[11px] tabular-nums text-slate-500">
-                          <span>10%</span><span>100%</span>
+                        <div
+                          aria-hidden="true"
+                          className="flex justify-between text-[11px] tabular-nums text-slate-500"
+                        >
+                          <span>10%</span>
+                          <span>100%</span>
                         </div>
                       </div>
                       <label className="my-3 flex items-start gap-2 text-xs">
@@ -991,10 +1109,22 @@ export function BreakEvenCalculator({
                       <p className="mt-1 text-2xl font-semibold tabular-nums">
                         {money(recommendation)}
                       </p>
-                      {margin / 100 + (includeOperating ? preview.commissionRate : 0) >= 1 && <p role="status" className="mt-2 text-xs text-rose-600 dark:text-rose-400">No valid price: profit margin plus included commission must be below 100%.</p>}
+                      {margin / 100 +
+                        (includeOperating ? preview.commissionRate : 0) >=
+                        1 && (
+                        <p
+                          role="status"
+                          className="mt-2 text-xs text-rose-600 dark:text-rose-400"
+                        >
+                          No valid price: profit margin plus included commission
+                          must be below 100%.
+                        </p>
+                      )}
                       <button
                         type="button"
-                        disabled={recommendation === null}
+                        disabled={
+                          recommendation === null || !!draft.publicMenuItemId
+                        }
                         onClick={() =>
                           update({ sellingPrice: recommendation! })
                         }
@@ -1064,7 +1194,11 @@ export function BreakEvenCalculator({
                               <td className="text-right">
                                 <button
                                   type="button"
-                                  disabled={busy || price === null}
+                                  disabled={
+                                    busy ||
+                                    price === null ||
+                                    !!draft.publicMenuItemId
+                                  }
                                   title={`Use ${target}% price`}
                                   aria-label={`Use ${target}% price`}
                                   onClick={() => {
@@ -1104,7 +1238,7 @@ export function BreakEvenCalculator({
                   </button>
                   <button
                     type="submit"
-                    disabled={busy || !ready}
+                    disabled={busy || !ready || catalogBusy}
                     className="flex items-center gap-2 rounded-md bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
                   >
                     <Save size={16} />

@@ -1,3 +1,4 @@
+import type { InventoryItem, MonthlyExpenseItem } from '../types';
 import { supabase } from './supabase';
 import { loadAppState } from './appState';
 import { sortVendorLedgerByDate, validateVendorLedgerEntry, type VendorLedgerEntry } from '../utils/vendorLedger';
@@ -52,3 +53,17 @@ export async function saveVendorLedger(entries: VendorLedgerEntry[]) {
   throw new Error('Vendor ledger changed in another session. Please retry.');
 }
 
+
+export async function deleteVendorHistoryEntry(entry: VendorLedgerEntry, originalExpense?: MonthlyExpenseItem) {
+  if (!supabase) throw new Error('Connect to Supabase before deleting vendor history.');
+  const expected = entry.sourceExpenseId ? originalExpense : entry;
+  if (!expected) throw new Error('The original payment is missing. Reload before deleting.');
+  const { data, error } = await supabase.rpc('delete_vendor_history_entry', {
+    p_key: entry.sourceExpenseId ? 'sea_slash_expenses_v1' : VENDOR_LEDGER_KEY,
+    p_id: entry.sourceExpenseId ?? entry.id,
+    p_expected: expected,
+  });
+  if (error) throw new Error(error.code === 'PGRST202'
+    ? 'Run supabase-vendor-history-delete.sql in Supabase SQL Editor to enable admin-only deletion.' : error.message);
+  return data as { ledger: VendorLedgerEntry[]; expenses: MonthlyExpenseItem[]; inventory: InventoryItem[] };
+}

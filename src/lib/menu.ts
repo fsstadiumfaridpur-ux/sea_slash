@@ -1,3 +1,5 @@
+import {getAdminPublicMenu} from './publicMenu';
+import {syncCostingCatalog} from '../utils/costingMenuCatalog';
 import { supabase } from './supabase';
 import type { RecipeItem, MenuPricingSettings } from '../types';
 import { validateMenuItem, validateMenuPricing } from '../utils/menuPricing';
@@ -48,4 +50,9 @@ export async function saveMenuPricing(settings: MenuPricingSettings) {
   validateMenuPricing(settings);
   await requireAdmin();
   await saveAppState(MENU_PRICING_KEY, settings);
+}
+
+export async function syncPublicMenuCosting(): Promise<RecipeItem[]> {
+  const {menu} = await getAdminPublicMenu();
+  return updateMenu(current => syncCostingCatalog(current, menu.items));
 }

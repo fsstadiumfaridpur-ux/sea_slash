@@ -17,11 +17,12 @@ export interface Vendor {
 
 const inputClass = 'mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900';
 
-export function VendorsView({ vendors, inventory, inventoryCategories, categories: customCategories, onAddCategory, onSave, onDelete, canEdit, isAdmin, ledger, onSaveLedger }: {
+export function VendorsView({ vendors, inventory, inventoryCategories, categories: customCategories, onAddCategory, onSave, onDelete, canEdit, isAdmin, ledger, onSaveLedger, onDeleteLedger }: {
   vendors: Vendor[];
   inventory: InventoryItem[];
   inventoryCategories: InventoryCategoryDefinition[];
   ledger: VendorLedgerEntry[];
+  onDeleteLedger: (entry: VendorLedgerEntry) => Promise<void>;
   onSaveLedger: (entry: VendorLedgerEntry) => Promise<void>;
   categories: string[];
   onAddCategory: (name: string) => Promise<void>;
@@ -80,7 +81,7 @@ export function VendorsView({ vendors, inventory, inventoryCategories, categorie
   }
 
   const selected = vendors.find(vendor => vendor.id === selectedId);
-  if (selected) return <VendorLedgerView inventoryCategories={inventoryCategories} inventory={inventory} vendor={selected} entries={ledger} canEdit={canEdit} canOverride={isAdmin && canEdit} onBack={() => setSelectedId(null)} onSave={onSaveLedger} />;
+  if (selected) return <VendorLedgerView inventoryCategories={inventoryCategories} inventory={inventory} vendor={selected} entries={ledger} canEdit={canEdit} canOverride={isAdmin && canEdit} onBack={() => setSelectedId(null)} onSave={onSaveLedger} onDelete={onDeleteLedger} />;
 
   return <section className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3">

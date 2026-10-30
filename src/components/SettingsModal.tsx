@@ -1,3 +1,4 @@
+import {AccountSecurity} from './AccountSecurity';
 import { roundMoney } from '../utils/money';
 import { NumericInput } from './NumericInput';
 import React, { useState, useEffect } from 'react';
@@ -36,6 +37,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onImportData,
   onResetData,
 }) => {
+  const [panel,setPanel]=useState<'restaurant'|'security'>('restaurant');
   const [stallName, setStallName] = useState(settings.stallName);
   const [foodCourtName, setFoodCourtName] = useState(settings.foodCourtName);
   const [stallNumber, setStallNumber] = useState(settings.stallNumber);
@@ -52,6 +54,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setCommissionPct(settings.commissionRate * 100);
     setManagerContact(settings.managerContact);
   }, [isOpen, settings]);
+
+  useEffect(()=>{if(isOpen)setPanel('restaurant');},[isOpen]);
 
   if (!isOpen) return null;
 
@@ -88,7 +92,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-      <div role="dialog" aria-modal="true" aria-label="Restaurant settings" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-xl my-8 overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-label="Restaurant settings" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-xl my-8 max-h-[90dvh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/60">
           <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Settings className="w-4 h-4 text-amber-700 dark:text-amber-400" />
@@ -99,7 +103,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <div role="tablist" aria-label="Settings sections" className="flex gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">{([['restaurant','Restaurant settings'],['security','Account security']] as const).map(([value,label])=><button key={value} type="button" role="tab" aria-selected={panel===value} onClick={()=>setPanel(value)} className={`rounded-md px-3 py-2 text-sm font-medium ${panel===value?'bg-amber-100 text-amber-950 dark:bg-amber-900 dark:text-amber-100':'text-slate-500'}`}>{label}</button>)}</div>
+        {panel==='security'?<AccountSecurity/>:<form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Stall Details */}
           <div className="space-y-3">
             <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
@@ -264,7 +269,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>Save Settings</span>
             </button>
           </div>
-        </form>
+        </form>}
       </div>
     </div>
   );

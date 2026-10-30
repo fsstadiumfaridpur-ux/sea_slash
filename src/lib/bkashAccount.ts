@@ -18,10 +18,10 @@ export async function loadBkashSnapshot(){
   const [account,sales,expenses,purchases,advances]=await Promise.all([loadBkashAccount(),loadAppState<DailySalesRecord[]>('sea_slash_sales_v1'),loadAppState<MonthlyExpenseItem[]>('sea_slash_expenses_v1'),loadAppState<PurchaseRecord[]>('sea_slash_purchases_v1'),loadAppState<StaffAdvance[]>('sea_slash_advances_v1')]);
   return {account,sales:removeDemoSales(sales??[]),expenses:linkedExpenses(removeDemoExpenses(expenses??[]),removeDemoPurchases(purchases??[]),advances??[],[],[]).map(expense=>expense.source==='advance'?{...expense,vendor:undefined}:expense)};
 }
-async function updateAccount(change:(current:BkashAccount)=>BkashAccount,adminOnly=false){
+async function updateAccount(change:(current:BkashAccount)=>BkashAccount){
   if(!supabase)throw new Error('Connect to Supabase before recording bKash transfers.');
-  const {data:allowed,error:roleError}=await supabase.rpc(adminOnly?'is_restaurant_admin':'can_manage_restaurant');
-  if(roleError||allowed!==true)throw new Error(adminOnly?'Administrator access required to set the opening balance.':'Administrator or manager access required.');
+  const {data:allowed,error:roleError}=await supabase.rpc('is_restaurant_admin');
+  if(roleError||allowed!==true)throw new Error('Administrator access required to change the bKash account.');
   for(let attempt=0;attempt<3;attempt++){
     const {data,error}=await supabase.from(table).select('value,updated_at').eq('key',key).maybeSingle();if(error)throw error;
     const current=data?.value??emptyBkashAccount;validateBkashAccount(current);
@@ -36,11 +36,18 @@ async function updateAccount(change:(current:BkashAccount)=>BkashAccount,adminOn
 export function setBkashOpening(date:string,amount:number){return updateAccount(current=>{
   if(current.opening)throw new Error('The opening balance is already set. Reload the account.');
   return {...current,opening:{date,amount}};
-},true);}
+});}
 export function addBkashTransfer(transfer:BkashTransfer){return updateAccount(current=>{
   if(!current.opening)throw new Error('Set the opening balance before recording transfers.');
   const existing=current.transfers.find(row=>row.id===transfer.id);
   if(existing){if(JSON.stringify(existing)!==JSON.stringify(transfer))throw new Error('This transfer ID already exists.');return current;}
   return {...current,transfers:[...current.transfers,transfer]};
 });}
-export function restoreBkashAccount(account:BkashAccount){validateBkashAccount(account);return updateAccount(()=>account,true);}
+export function restoreBkashAccount(account:BkashAccount){validateBkashAccount(account);return updateAccount(()=>account);}
+
+export async function deleteBkashTransfer(transfer:BkashTransfer){
+  if(!supabase)throw new Error('Connect to Supabase before deleting bKash transactions.');
+  const {data,error}=await supabase.rpc('delete_bkash_transfer',{p_id:transfer.id,p_expected:transfer});
+  if(error)throw new Error(error.code==='PGRST202'?'Run supabase-bkash-delete.sql in Supabase SQL Editor to enable admin-only bKash deletion.':error.message);
+  validateBkashAccount(data);return data as BkashAccount;
+}

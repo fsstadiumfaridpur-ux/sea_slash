@@ -1,6 +1,6 @@
 import { DailyCashPrintPreview } from './DailyCashPrintPreview';
 import { useEffect, useState } from 'react';
-import { loadCashFloat, saveCashFloat } from '../lib/dailyCash';
+import { loadCashFloat, addCashFloat } from '../lib/dailyCash';
 import { NumericInput } from './NumericInput';
 import type { DailySalesRecord, MonthlyExpenseItem, FoodCourtSettings } from '../types';
 import { calculateDailyCash } from '../utils/dailyCash';
@@ -23,11 +23,14 @@ export function DailyCashView({ sales, expenses, date, onDateChange, onEditSales
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [requestId,setRequestId]=useState(()=>crypto.randomUUID());
+  const [pending,setPending]=useState<{date:string;amount:number;previous:number;total:number;id:string}|null>(null);
+  const [alreadyApplied,setAlreadyApplied]=useState(false);
   useEffect(() => {
     let cancelled = false;
-    setLoadedDate(''); setError(''); setSaved(false); setCashFloat(0); setDraftFloat(0);
+    setLoadedDate(''); setError(''); setSaved(false); setCashFloat(0); setDraftFloat(0); setPending(null); setRequestId(crypto.randomUUID());
     loadCashFloat(date).then(amount => {
-      if (!cancelled) { setCashFloat(amount); setDraftFloat(amount); setLoadedDate(date); }
+      if (!cancelled) { setCashFloat(amount); setDraftFloat(0); setLoadedDate(date); }
     }).catch(failure => { if (!cancelled) setError(failure instanceof Error ? failure.message : 'Could not load change float.'); });
     return () => { cancelled = true; };
   }, [date]);
@@ -40,27 +43,45 @@ export function DailyCashView({ sales, expenses, date, onDateChange, onEditSales
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">Daily Cash</h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Track the cash available to receive from the shop each day.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3"><button type="button" disabled={!ready || saving || draftFloat !== cashFloat} title={draftFloat !== cashFloat ? "Save the change float before printing" : "Preview a thermal receipt with all daily expenses"} onClick={() => setPrintOpen(true)} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">Print Daily Cash</button><input type="date" aria-label="Daily cash date" required disabled={saving} value={date} onChange={event => { if (event.target.value) onDateChange(event.target.value); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-white" /></div>
+        <div className="flex flex-wrap items-center gap-3"><button type="button" disabled={!ready || saving || draftFloat !== 0} title={draftFloat !== 0 ? "Save or clear the cash top-up before printing" : "Preview a thermal receipt with all daily expenses"} onClick={() => setPrintOpen(true)} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">Print Daily Cash</button><input type="date" aria-label="Daily cash date" required disabled={saving || !!pending} value={date} onChange={event => { if (event.target.value) onDateChange(event.target.value); }} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-white" /></div>
       </div>
       {printOpen && <DailyCashPrintPreview date={date} sales={sales} expenses={expenses} settings={settings} openingCash={cashFloat} onClose={() => setPrintOpen(false)} />}
       <form onSubmit={async event => {
-        event.preventDefault(); setSaving(true); setError(''); setSaved(false);
-        try { await saveCashFloat(date, draftFloat); setCashFloat(draftFloat); setSaved(true); }
+        event.preventDefault(); if(!ready||saving||pending)return; setSaving(true); setError(''); setSaved(false);
+        try {
+          if(!Number.isFinite(draftFloat)||draftFloat<=0||draftFloat>1e12||Math.abs(draftFloat*100-Math.round(draftFloat*100))>0.0001)throw new Error('Enter a positive cash top-up with up to two decimal places.');
+          const previous=await loadCashFloat(date);setCashFloat(previous);
+          setPending({date,amount:draftFloat,previous,total:Math.round((previous+draftFloat)*100)/100,id:requestId});
+        }
         catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not save change float.'); }
         finally { setSaving(false); }
       }} className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <fieldset disabled={!ready || saving} className="space-y-3">
-          <label htmlFor="daily-change-float" className="block text-sm font-semibold text-slate-900 dark:text-white">Opening Cash / Change Float</label>
-          <p className="text-xs text-slate-600 dark:text-slate-400">Enter the total money you supplied for change on this date. Saving replaces this day’s amount. This increases till cash without counting as sales or profit.</p>
+        <fieldset disabled={!ready || saving || !!pending} className="space-y-3">
+          <h3 className="block text-sm font-semibold text-slate-900 dark:text-white">Opening Cash / Change Float</h3>
+          <p className="text-xs text-slate-600 dark:text-slate-400">Enter only the extra change cash you are supplying now. It will be added to this date’s saved float, including top-ups during the day. This does not count as sales or profit. Cash cannot be taken back through this control.</p>
+          <p className="text-sm font-medium">Saved opening / change float: {ready?formatBDT(cashFloat):'—'}</p>
+          <label htmlFor="daily-change-float" className="block text-xs text-slate-500">Additional cash to add (BDT)</label>
           <div className="flex flex-wrap gap-3">
-            <NumericInput id="daily-change-float" min={0} step="0.01" value={draftFloat} onChange={event => { setDraftFloat(Number(event.target.value)); setSaved(false); }} className="rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-slate-900 dark:border-slate-700 dark:text-white" />
-            <button type="submit" className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50">{saving ? 'Saving…' : 'Save Change Float'}</button>
+            <NumericInput id="daily-change-float" required min={0.01} step="0.01" value={draftFloat} onChange={event => { setDraftFloat(Number(event.target.value)); setSaved(false); setRequestId(crypto.randomUUID()); }} className="rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-slate-900 dark:border-slate-700 dark:text-white" />
+            <button type="submit" className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50">{saving ? 'Saving…' : 'Add Change Float'}</button>
           </div>
         </fieldset>
         {!ready && !error && <p role="status" className="mt-3 text-sm text-slate-500">Loading change float…</p>}
-        {saved && <p role="status" className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">Change float saved for {date}.</p>}
+        {saved && <p role="status" className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">{alreadyApplied?'This cash top-up was already saved.':'Cash top-up saved.'} Total opening / change float for {date}: {formatBDT(cashFloat)}.</p>}
         {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
       </form>
+      {pending&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div role="alertdialog" aria-modal="true" aria-labelledby="float-confirm-title" className="w-full max-w-md space-y-4 rounded-xl bg-white p-5 dark:bg-slate-950">
+        <h3 id="float-confirm-title" className="text-lg font-semibold">Add to opening / change float?</h3>
+        <p className="text-sm">This will add {formatBDT(pending.amount)} to the saved amount for {pending.date}.</p>
+        <div className="rounded-lg bg-amber-50 p-4 font-semibold text-amber-950 dark:bg-amber-950 dark:text-amber-100">{formatBDT(pending.previous)} + {formatBDT(pending.amount)} = {formatBDT(pending.total)}</div>
+        <p className="text-sm text-slate-500">The new total opening / change float will be {formatBDT(pending.total)}. This adds cash; it does not replace or withdraw the saved amount.</p>
+        <div className="flex justify-end gap-3"><button autoFocus type="button" disabled={saving} onClick={()=>setPending(null)} className="rounded-md border px-3 py-2 text-sm">Cancel</button><button type="button" disabled={saving} onClick={async()=>{
+          if(saving)return;setSaving(true);setError('');
+          try{const result=await addCashFloat(pending.date,pending.amount,pending.previous,pending.id);setCashFloat(result.total);setDraftFloat(0);setAlreadyApplied(result.alreadyApplied);setRequestId(crypto.randomUUID());setSaved(true);setPending(null);}
+          catch(failure){setError(failure instanceof Error?failure.message:'Could not add change float.');setPending(null);try{setCashFloat(await loadCashFloat(pending.date));}catch{/* Keep the last confirmed total; the error stays visible. */}}
+          finally{setSaving(false);}
+        }} className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-40">{saving?'Saving…':'OK, add cash'}</button></div>
+      </div></div>}
       <div className="grid gap-4 sm:grid-cols-3">
         {[
           { label: 'Total Software Sales', amount: totals.totalSales, detail: 'All recorded payment methods' },

@@ -1,5 +1,5 @@
-import { loadAppState, saveAppState } from './appState';
-import { isSupabaseConfigured } from './supabase';
+import { loadAppState } from './appState';
+import { isSupabaseConfigured, supabase } from './supabase';
 
 function cashFloatKey(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) throw new Error('Select a valid cash date.');
@@ -17,9 +17,12 @@ export async function loadCashFloat(date: string): Promise<number> {
   return amount;
 }
 
-export async function saveCashFloat(date: string, amount: number): Promise<void> {
-  const key = cashFloatKey(date);
-  validateAmount(amount);
-  await saveAppState(key, amount);
-  localStorage.setItem(key, JSON.stringify(amount));
+export async function addCashFloat(date:string,amount:number,expected:number,id:string):Promise<{total:number;alreadyApplied:boolean}> {
+  cashFloatKey(date);
+  if(!Number.isFinite(amount)||amount<=0||amount>1e12||Math.abs(amount*100-Math.round(amount*100))>0.0001)throw new Error('Enter an amount greater than zero with up to two decimal places.');
+  if(!supabase)throw new Error('Connect to Supabase before adding change float.');
+  const {data,error}=await supabase.rpc('add_daily_cash_float',{p_id:id,p_date:date,p_amount:amount,p_expected:expected});
+  if(error)throw new Error(error.code==='PGRST202'?'Run supabase-cash-float-topups.sql in Supabase SQL Editor to enable cash top-ups.':error.message);
+  validateAmount(data.total);
+  return data;
 }
